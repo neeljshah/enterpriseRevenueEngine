@@ -1,108 +1,199 @@
-# 🏢 Enterprise Revenue Engine: End-to-End Business Intelligence & AI System
-> **A Comprehensive Cloud-Native Ecosystem integrating Data Engineering (BigQuery), Predictive Modeling, Marketing Attribution, and Generative AI to drive $1.7M+ in Optimized Revenue.**
+# 🏢 Unified Retail Intelligence Engine
+### End-to-End Business Analytics Pipeline | $1.7M Revenue Optimization Ecosystem
 
-![BigQuery](https://img.shields.io/badge/Cloud-Google_BigQuery-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)
-![Python](https://img.shields.io/badge/Science-Python_3.10-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![GenAI](https://img.shields.io/badge/AI-LangChain_/_OpenAI-00A67E?style=for-the-badge&logo=openai&logoColor=white)
-![ML](https://img.shields.io/badge/ML-Random_Forest_/_K--Means-orange?style=for-the-badge)
-![Stats](https://img.shields.io/badge/Stats-A/B_Testing_/_Prophet-green?style=for-the-badge)
+> **"From raw transaction data to boardroom-ready insights — forecasting, segmentation, pricing, and A/B testing in one unified system."**
 
 ---
 
-## 📖 Project Overview: The Business Challenge
-Modern retail enterprises suffer from "Data Silos"—where sales forecasts, customer behavior, and marketing spend are analyzed in isolation. This project builds a **Unified Intelligence Engine** that breaks those silos. 
+## 📸 Project Overview
 
-By processing 500,000+ global transactions, this system:
-1.  **Forecasts Future Revenue** to optimize inventory.
-2.  **Identifies At-Risk VIPs** to prevent churn.
-3.  **Proves Marketing ROI** through rigorous A/B testing.
-4.  **Automates Executive Insights** via a Generative AI Chatbot.
+This project is a **4-phase business intelligence pipeline** built on a real-world UK retail dataset (500K+ transactions). Each phase answers a critical business question using production-grade data science techniques — from predicting next quarter's revenue to identifying which marketing channel deserves more budget.
 
 ---
 
-## 🏗️ System Architecture
-`CSV/API Data` $\rightarrow$ `Python Ingestion` $\rightarrow$ `BigQuery (Cloud Warehouse)` $\rightarrow$ `dbt (Transformation)` $\rightarrow$ `Machine Learning Models` $\rightarrow$ `Streamlit AI Agent`
+## 🚀 The 4-Phase Pipeline
+
+```
+Raw Data (online_retail_II.csv)
+    │
+    ├── Phase 1: Revenue Forecasting       → Prophet 90-day demand model
+    ├── Phase 2: Customer Segmentation     → RFM + K-Means + Churn Prediction
+    ├── Phase 3: Marketing Attribution     → Channel ROI + A/B Testing
+    └── Phase 4: Product KPIs              → Profitability Matrix + Return Rate
+```
 
 ---
 
-## 🚀 Phase 1: Predictive Revenue Forecasting & Pricing Elasticity
-* **The Business Problem:** Unpredictable demand leads to overstocking costs and missed sales opportunities.
-* **Technical Solution:** Implemented **Meta’s Prophet** algorithm to model daily sales with yearly and weekly seasonality.
-* **Pricing Optimization:** Developed a **Log-Log Regression model** to calculate Price Elasticity of Demand (PED).
-* **Key KPI:** **$1.76M Predicted Revenue** for Q4 with a MAPE (Mean Absolute Percentage Error) of <8%.
-* **Strategic Insight:** Identified "World War 2 Gliders" as a **High-Elasticity (-4.20)** product, advising against price increases to protect volume.
+## 📊 Phase Breakdown
+
+### Phase 1 — Revenue Forecasting
+**Question:** *What will revenue look like over the next 90 days?*
+
+- Resampled daily UK revenue and fed it into **Facebook Prophet** with yearly seasonality
+- Forecasted 90 days ahead with confidence intervals
+- Extracted **pricing elasticity** on the top-selling SKU using **Log-Log OLS Regression**
+- Elasticity coefficient interpretation: < -1 = price sensitive (don't raise prices), > -1 = inelastic (safe to raise)
+
+```python
+model = Prophet(yearly_seasonality=True)
+model.fit(daily_revenue)
+forecast = model.predict(future)  # 90-day horizon
+
+# Log-Log elasticity regression
+X = sm.add_constant(np.log(elasticity_df['Price']))
+y = np.log(elasticity_df['Quantity'])
+elasticity_value = sm.OLS(y, X).fit().params[1]
+```
+
+**Output:**
+- 📈 90-day revenue forecast chart with uncertainty bands
+- 💰 Elasticity score + business recommendation per SKU
 
 ---
 
-## 👥 Phase 2: Behavioral Segmentation & Churn Prevention
-* **The Business Problem:** Acquiring a new customer is 5x more expensive than retaining one. We need to find the "Leaky Bucket."
-* **Technical Solution:** 
-    *   **RFM Modeling:** Segmented 5,300+ customers into "Champions," "Loyal," and "At-Risk" using **K-Means Clustering**.
-    *   **Churn Prediction:** Trained a **Random Forest Classifier** on latent behavioral features (Variety, Frequency, Monetary).
-* **Key KPI:** **85.4% Accuracy** in predicting customer churn 30 days in advance.
-* **Strategic Insight:** Discovered that 15% of VIP customers were showing "High-Recency" behavior, triggering an automated retention workflow.
+### Phase 2 — Customer Segmentation & Churn Prediction
+**Question:** *Who are our best customers, who's about to leave, and how accurately can we predict it?*
+
+- Built **RFM features** (Recency, Frequency, Monetary) per customer
+- Applied **log-transform + StandardScaler** to normalize high-skew distributions before clustering
+- Ran **K-Means (k=3)** to segment customers into behavioral clusters (VIP, At-Risk, Low-Engagement)
+- Built a **Random Forest churn classifier** using Frequency + Monetary as features
+- Defined churn as Recency > 90 days
+
+```python
+rfm_log = np.log1p(rfm[['Recency', 'Frequency', 'Monetary']])
+rfm_scaled = scaler.fit_transform(rfm_log)
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+rfm['Cluster'] = kmeans.fit_predict(rfm_scaled)
+
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+```
+
+**Output:**
+- 🧩 Customer segment scatter plot (Recency vs Monetary, log-scale)
+- 🎯 Churn prediction accuracy score
+- 📊 VIP customer count isolated from smallest cluster
 
 ---
 
-## 🧪 Phase 3: Marketing Attribution & Experimental A/B Testing
-* **The Business Problem:** Which marketing channels actually drive the "Bottom Line" vs. "Vanity Metrics"?
-* **Technical Solution:** 
-    *   **Multi-Touch Attribution:** Compared **First-Touch** vs. **Last-Touch** models to assign revenue credit.
-    *   **A/B Testing:** Conducted a simulated experiment comparing "Free Shipping" vs. "20% Discount" using a **Two-Sample T-Test**.
-* **Key KPI:** **P-Value of 0.0002**. Proved "Free Shipping" generated 12% higher Average Order Value (AOV) than discounts.
-* **Strategic Insight:** Recommended shifting 20% of the "Google Ads" budget to "Email Marketing" due to a **4.5x higher ROI**.
+### Phase 3 — Marketing Attribution & A/B Testing
+**Question:** *Which marketing channel delivers the highest ROI, and does Free Shipping beat a 15% Discount?*
+
+- Assigned simulated marketing channels (Email, Google Ads, Social Media) based on behavioral proxies from RFM
+- Mapped **channel acquisition costs** and computed **ROI = (Revenue - Cost) / Cost** per channel
+- Ran a **Two-Sample T-Test** (A/B test) comparing Free Shipping vs 15% Discount coupon on 1,000 at-risk customers
+- Statistical significance threshold: p < 0.05
+
+```python
+t_stat, p_val = stats.ttest_ind(free_shipping_revenue, discount_coupon_revenue)
+# Free Shipping: ~$150 avg revenue
+# Discount Coupon: ~$135 avg revenue
+# P-Value: 0.0002 → Statistically Significant
+```
+
+**Output:**
+- 📊 Channel ROI bar chart (coolwarm palette)
+- ✅ A/B test winner: **Free Shipping** generated ~12% higher AOV (p = 0.0002)
 
 ---
 
-## 📦 Phase 4: Operational KPIs & Product Profitability Matrix
-* **The Business Problem:** Which products are "Hero Products" and which are "Cash Drainers"?
-* **Technical Skill:** Built a **Product Performance Matrix** using SQL Window Functions.
-* **Key KPIs Calculated:**
-    *   **Inventory Turnover Ratio:** High-volume vs. Low-volume stock.
-    *   **Return Rate Index:** Identifying quality control issues at the SKU level.
-    *   **AOV (Average Order Value):** $455.20.
-* **Strategic Insight:** Flagged 12 "Problem Products" with return rates >15%, saving an estimated $22k in annual reverse-logistics costs.
+### Phase 4 — Operational KPIs & Product Profitability Matrix
+**Question:** *Which products are heroes, and which are quietly destroying margin through returns?*
+
+- Calculated **Return Rate** per product by comparing negative vs positive quantity rows
+- Computed **Inventory Turnover Share** as each product's share of total sales volume
+- Built a **Product Profitability Matrix** categorizing every SKU into:
+  - ⭐ **Star (Hero):** High volume + low return rate
+  - ⚠️ **Problem:** High volume + high return rate
+  - 📦 **Low Volume:** Below-median sales
+- Calculated **Average Order Value (AOV)** across all UK invoices
+
+```python
+def categorize_product(row):
+    if row['Quantity'] > product_stats['Quantity'].median():
+        if row['Return_Rate'] < product_stats['Return_Rate'].median():
+            return 'Star (Hero)'
+        else:
+            return 'Problem (High Returns)'
+    else:
+        return 'Low Volume'
+```
+
+**Output:**
+- 🔵 Profitability Matrix scatter (log-scale volume vs return rate)
+- 🏆 Top 5 Hero Products ranked by volume
+- 💳 AOV summary + overall return rate
 
 ---
 
-## ☁️ Phase 5: Cloud Data Engineering (Google BigQuery)
-* **The Business Problem:** Local CSV files do not scale. We need a "Single Source of Truth."
-* **Technical Solution:** 
-    *   Automated ingestion into **BigQuery** using Service Account authentication.
-    *   Implemented **Data Partitioning (by Date)** and **Clustering (by Country)** to reduce query costs by 40%.
-    *   Developed a **SQL Star Schema** (Fact and Dimension tables) for optimized BI reporting.
+## ⚙️ Tech Stack
+
+| Library | Usage |
+|---|---|
+| **Pandas** | Data cleaning, resampling, RFM aggregation |
+| **Prophet** | 90-day time-series revenue forecasting |
+| **Statsmodels** | Log-Log OLS regression for pricing elasticity |
+| **Scikit-Learn** | K-Means clustering, Random Forest churn model, StandardScaler |
+| **SciPy** | Two-sample T-Test for A/B testing |
+| **Matplotlib / Seaborn** | All visualizations |
+| **NumPy** | Log transforms, array operations |
 
 ---
 
-## 🤖 Phase 6: Generative AI "Chat-with-Data" Assistant
-* **The Business Problem:** Executives don't want to look at code; they want answers to questions.
-* **Technical Solution:** Built a **RAG (Retrieval-Augmented Generation)** agent using **LangChain** and **OpenAI GPT-4o**.
-* **Functionality:** The AI reads the BigQuery tables and performs real-time Python analysis to answer natural language prompts.
-* **User Experience:** *"Hey AI, which customer segment should we target for the holiday sale?"* $\rightarrow$ *"Based on the K-Means model, target Cluster 2 (At-Risk VIPs) with the Free Shipping offer proved in Phase 3."*
+## 🧠 Key Results
+
+| Metric | Result |
+|---|---|
+| Forecast Horizon | 90 days |
+| Top SKU Price Elasticity | -4.20 (highly price sensitive) |
+| A/B Test P-Value | 0.0002 ✅ Significant |
+| Free Shipping AOV Lift | ~12% over discount coupon |
+| Churn Prediction Accuracy | ~85%+ (Random Forest) |
+| VIP Customers Identified | Smallest K-Means cluster |
 
 ---
 
-## 🛠️ Technical Mastery Checklist
-- [x] **Cloud:** Google Cloud Platform, BigQuery, IAM Service Accounts.
-- [x] **ML Algorithms:** K-Means, Random Forest, Linear Regression, Prophet.
-- [x] **Statistics:** T-Testing, P-Values, Normalization, Z-Scores.
-- [x] **Data Engineering:** SQL (CTEs, Window Functions), Schema Design, ETL Pipelines.
-- [x] **GenAI:** LangChain, OpenAI API, Prompt Engineering, Streamlit.
+## 🚀 Getting Started
+
+### Prerequisites
+```bash
+pip install pandas prophet statsmodels scikit-learn scipy matplotlib seaborn numpy
+```
+
+### Run the Pipeline
+```bash
+# 1. Place your dataset in the project root
+#    Dataset: online_retail_II.csv (UCI Machine Learning Repository)
+
+# 2. Run the full pipeline
+python retail_intelligence.py
+```
+
+### Dataset
+This project uses the **Online Retail II** dataset from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/Online+Retail+II).
+- 500K+ transactions from a UK-based online retailer (2009–2011)
+- Features: InvoiceNo, StockCode, Description, Quantity, InvoiceDate, Price, CustomerID, Country
 
 ---
 
-## 📂 Project Structure
-```text
-├── Cloud_Engineering/
-│   ├── BigQuery_Schema.sql         # Fact & Dimension Tables
-│   └── Ingestion_Pipeline.py       # Cloud Upload Script
-├── Models/
-│   ├── Forecasting_Prophet.py      # Time-Series Logic
-│   ├── Churn_Random_Forest.py      # Classification Model
-│   └── Clustering_KMeans.py        # Segmentation Logic
-├── Analytics/
-│   ├── AB_Testing_Stats.py         # Hypothesis Testing
-│   └── Pricing_Elasticity.py       # Regression Analysis
-├── AI_Agent/
-│   └── streamlit_app.py            # LangChain/GPT Interface
-└── README.mdvv
+## 📁 Repository Structure
+
+```
+Enterprise-Revenue-Engine/
+├── retail_intelligence.py       # Full 4-phase pipeline
+├── online_retail_II.csv         # Dataset (download separately)
+├── outputs/
+│   ├── forecast_chart.png
+│   ├── customer_segments.png
+│   ├── channel_roi.png
+│   └── profitability_matrix.png
+└── README.md
+```
+
+---
+
+## 🔗 Related Projects
+
+- 🏀 [Basketball Intelligence Suite](https://github.com/neeljshah/Basketball-Intelligence-Suite) — 4-part spatial & behavioral analytics system for NBA data
+- 👁️ [Project CourtVision](https://github.com/neeljshah/Project-CourtVision) — Real-time computer vision player tracking with YOLOv8
