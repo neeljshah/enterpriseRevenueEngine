@@ -326,7 +326,6 @@ with tab1:
 
     with col_b:
         forecast_total = sum(future_vals)
-        monthly_avg    = daily['y'].resample('ME', on='ds').sum().mean() if hasattr(daily.set_index('ds')['y'].resample('ME'), 'sum') else daily['y'].mean() * 30
         st.metric("Forecast Revenue", f"£{forecast_total:,.0f}", f"Next {forecast_days} days")
         st.metric("Daily Avg (Historical)", f"£{daily['y'].mean():,.0f}")
         peak_day = daily.loc[daily['y'].idxmax(), 'ds'].strftime('%b %d, %Y')
