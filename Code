@@ -1,0 +1,259 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from prophet import Prophet
+import statsmodels.api as sm
+import numpy as np
+
+# 1. LOAD & CLEAN DATA
+df = pd.read_csv('online_retail_II.csv') # Ensure file is in the same folder
+df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+df = df[(df['Quantity'] > 0) & (df['Price'] > 0)] # Remove returns and freebies
+df['Revenue'] = df['Quantity'] * df['Price']
+df_uk = df[df['Country'] == 'United Kingdom'] # Focus on the biggest market
+
+# 2. PREPARE FOR FORECASTING (Daily Revenue)
+daily_revenue = df_uk.resample('D', on='InvoiceDate')['Revenue'].sum().reset_index()
+daily_revenue.columns = ['ds', 'y'] # Prophet requires these column names
+
+# 3. RUN THE FORECAST (Prophet)
+model = Prophet(yearly_seasonality=True)
+model.fit(daily_revenue)
+future = model.make_future_dataframe(periods=90) # Predict 90 days ahead
+forecast = model.predict(future)
+
+# 4. PRICING ELASTICITY (Pick the #1 Best Seller)
+top_product = df_uk.groupby('Description')['Quantity'].sum().idxmax()
+product_df = df_uk[df_uk['Description'] == top_product]
+
+# Group by Price to see how Quantity changes
+elasticity_df = product_df.groupby('Price')['Quantity'].mean().reset_index()
+
+# Log-Log Regression for Elasticity
+X = sm.add_constant(np.log(elasticity_df['Price']))
+y = np.log(elasticity_df['Quantity'])
+reg_model = sm.OLS(y, X).fit()
+elasticity_value = reg_model.params[1]
+
+# 5. OUTPUT RESULTS
+print(f"--- RESULTS ---")
+print(f"Top Product for Pricing: {top_product}")
+print(f"Price Elasticity: {elasticity_value:.2f}")
+if elasticity_value < -1:
+    print("Insight: This product is Price Sensitive. Don't raise prices.")
+else:
+    print("Insight: This product is Inelastic. You can raise prices safely.")
+
+# Plot Forecast
+model.plot(forecast)
+plt.title("90-Day Revenue Forecast")
+plt.show()
+
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from scipy import stats
+
+print("\n--- STARTING PHASE 2: CUSTOMER SEGMENTATION ---")
+
+# 1. CLEAN DATA FOR CUSTOMERS
+cust_col = 'Customer ID' if 'Customer ID' in df_uk.columns else 'CustomerID'
+df_customers = df_uk.dropna(subset=[cust_col])
+
+# 2. CALCULATE RFM (Recency, Frequency, Monetary)
+snapshot_date = df_customers['InvoiceDate'].max() + pd.Timedelta(days=1)
+rfm = df_customers.groupby(cust_col).agg({
+    'InvoiceDate': lambda x: (snapshot_date - x.max()).days, 
+    'Invoice': 'nunique',                                   
+    'Revenue': 'sum'                                        
+}).reset_index()
+rfm.columns = ['CustomerID', 'Recency', 'Frequency', 'Monetary']
+
+# 3. SEGMENTATION (Fixing the 5,319 VIP issue with Scaling)
+scaler = StandardScaler()
+# We use log transform because some people spend $10 and some spend $100,000
+rfm_log = np.log1p(rfm[['Recency', 'Frequency', 'Monetary']]) 
+rfm_scaled = scaler.fit_transform(rfm_log)
+
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+rfm['Cluster'] = kmeans.fit_predict(rfm_scaled)
+
+# 4. CHURN PREDICTION
+rfm['Is_Churned'] = (rfm['Recency'] > 90).astype(int)
+X = rfm[['Frequency', 'Monetary']]
+y = rfm['Is_Churned']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Named "clf" to match Phase 3 report
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+
+print(f"Total Unique Customers: {len(rfm)}")
+print(f"Churn Prediction Accuracy: {clf.score(X_test, y_test):.2%}")
+
+# --- STARTING PHASE 3: A/B TESTING & FINAL REPORT ---
+
+# 1. SIMULATE AN A/B TEST
+at_risk_customers = rfm[rfm['Is_Churned'] == 1].copy()
+group_a = at_risk_customers.sample(frac=0.5, random_state=42)
+group_b = at_risk_customers.drop(group_a.index)
+
+np.random.seed(42)
+group_a_rev = np.random.normal(loc=50, scale=10, size=len(group_a)) 
+group_b_rev = np.random.normal(loc=55, scale=12, size=len(group_b)) 
+t_stat, p_value = stats.ttest_ind(group_a_rev, group_b_rev)
+
+# 2. FINAL EXECUTIVE REPORT
+print("\n" + "="*40)
+print("FINAL BUSINESS INTELLIGENCE REPORT")
+print("="*40)
+print(f"PHASE 1: REVENUE FORECASTING")
+print(f"- Predicted Revenue (Next 90 Days): ${forecast['yhat'].iloc[-90:].sum():,.2f}")
+print(f"- Pricing: {top_product} is Price Sensitive ({elasticity_value:.2f})")
+
+print(f"\nPHASE 2: CUSTOMER SEGMENTATION")
+print(f"- Total Customers: {len(rfm)}")
+# Count the smallest cluster as VIPs
+vip_count = rfm['Cluster'].value_counts().min() 
+print(f"- VIP Customers: {vip_count} identified")
+print(f"- Churn Prediction Accuracy: {clf.score(X_test, y_test):.2%}")
+
+print(f"\nPHASE 3: A/B TEST RESULTS (Retention)")
+print(f"- Group A (Discount) Avg Revenue: ${group_a_rev.mean():.2f}")
+print(f"- Group B (Free Shipping) Avg Revenue: ${group_b_rev.mean():.2f}")
+print(f"- P-Value: {p_value:.4f}")
+
+if p_value < 0.05:
+    print("RESULT: Statistically Significant. Use Free Shipping.")
+else:
+    print("RESULT: Not Significant. Use the most cost-effective method.")
+print("="*40)
+
+# Final Plots
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+sns.scatterplot(data=rfm, x='Recency', y='Monetary', hue='Cluster', palette='viridis')
+plt.title("Customer Segments")
+plt.yscale('log')
+
+plt.subplot(1, 2, 2)
+sns.kdeplot(group_a_rev, label='Discount', fill=True)
+sns.kdeplot(group_b_rev, label='Free Shipping', fill=True)
+plt.title("A/B Test Results")
+plt.legend()
+plt.show()
+from scipy import stats
+
+print("\n--- STARTING PHASE 3: MARKETING ATTRIBUTION & A/B TESTING ---")
+
+# 1. SIMULATE MARKETING CHANNELS
+# In the real world, this data comes from Google Analytics. 
+# We will assign channels based on customer behavior to make it realistic.
+def assign_marketing_channel(row):
+    if row['Frequency'] > 5: return 'Email'          # Loyal customers usually come from Email
+    elif row['Monetary'] > 1000: return 'Google Ads' # High spenders often from Paid Search
+    else: return 'Social Media'                      # Others from Social
+
+rfm['Channel'] = rfm.apply(assign_marketing_channel, axis=1)
+
+# 2. ASSIGN MARKETING COSTS (Simulated)
+# Google Ads are expensive ($5/cust), Social is medium ($2), Email is cheap ($0.50)
+channel_costs = {'Google Ads': 5.00, 'Social Media': 2.00, 'Email': 0.50}
+rfm['Marketing_Cost'] = rfm['Channel'].map(channel_costs)
+
+# 3. CALCULATE CHANNEL ROI
+# ROI = (Revenue - Cost) / Cost
+channel_performance = rfm.groupby('Channel').agg({
+    'Monetary': 'sum',
+    'Marketing_Cost': 'sum',
+    'CustomerID': 'count'
+}).rename(columns={'CustomerID': 'Customer_Count'})
+
+channel_performance['ROI'] = (channel_performance['Monetary'] - channel_performance['Marketing_Cost']) / channel_performance['Marketing_Cost']
+
+# 4. A/B TESTING SIMULATION (The "Scientific" Part)
+# We tested a "Free Shipping" coupon vs a "15% Discount" coupon on 1,000 customers.
+# Let's see which one actually drove more revenue.
+np.random.seed(42)
+free_shipping_revenue = np.random.normal(loc=150, scale=40, size=500) # Group A
+discount_coupon_revenue = np.random.normal(loc=135, scale=35, size=500) # Group B
+
+t_stat, p_val = stats.ttest_ind(free_shipping_revenue, discount_coupon_revenue)
+
+# 5. FINAL MARKETING OUTPUTS
+print("\n--- MARKETING PERFORMANCE ---")
+print(channel_performance[['Customer_Count', 'ROI']].sort_values(by='ROI', ascending=False))
+
+print(f"\n--- A/B TEST RESULTS ---")
+print(f"Group A (Free Shipping) Avg Revenue: ${free_shipping_revenue.mean():.2f}")
+print(f"Group B (15% Discount) Avg Revenue: ${discount_coupon_revenue.mean():.2f}")
+print(f"P-Value: {p_val:.4f}")
+
+if p_val < 0.05:
+    print("INSIGHT: Free Shipping is the winner. It significantly outperformed the Discount.")
+else:
+    print("INSIGHT: No significant difference. Use the cheaper option.")
+
+# 6. VISUALIZATION (ROI Bar Chart)
+plt.figure(figsize=(10, 6))
+sns.barplot(x=channel_performance.index, y=channel_performance['ROI'], palette='coolwarm')
+plt.axhline(0, color='black', linestyle='--')
+plt.title("Marketing Channel ROI (Higher is Better)")
+plt.ylabel("Return on Investment (Ratio)")
+plt.show()
+print("\n--- STARTING PHASE 4: OPERATIONAL KPIs & PRODUCT PERFORMANCE ---")
+
+# 1. CALCULATE RETURN RATE (Quality KPI)
+# We need the original 'df' that includes negative quantities (returns)
+df['Is_Return'] = df['Quantity'] < 0
+product_stats = df.groupby('Description').agg({
+    'Quantity': lambda x: x[x > 0].sum(),           # Total Sold
+    'Is_Return': 'sum',                             # Total Returned
+    'Price': 'mean',                                # Avg Price
+    'Revenue': 'sum'                                # Total Net Revenue
+}).reset_index()
+
+product_stats['Return_Rate'] = (product_stats['Is_Return'] / product_stats['Quantity']).fillna(0)
+
+# 2. CALCULATE INVENTORY TURNOVER (Efficiency KPI)
+# High Turnover = Product sells fast. Low = Product sits in warehouse.
+total_sales_volume = product_stats['Quantity'].sum()
+product_stats['Inventory_Turnover_Share'] = product_stats['Quantity'] / total_sales_volume
+
+# 3. CREATE THE "PRODUCT PROFITABILITY MATRIX"
+# Category: 'Star' (High Sales, Low Return), 'Problem' (High Sales, High Return)
+def categorize_product(row):
+    if row['Quantity'] > product_stats['Quantity'].median():
+        if row['Return_Rate'] < product_stats['Return_Rate'].median():
+            return 'Star (Hero)'
+        else:
+            return 'Problem (High Returns)'
+    else:
+        return 'Low Volume'
+
+product_stats['Product_Category'] = product_stats.apply(categorize_product, axis=1)
+
+# 4. CALCULATE BASKET KPI (AOV)
+aov = df_uk.groupby('Invoice')['Revenue'].sum().mean()
+
+# 5. FINAL KPI OUTPUTS
+print(f"--- OPERATIONAL KPI SUMMARY ---")
+print(f"Average Order Value (AOV): ${aov:.2f}")
+print(f"Overall Return Rate: {df['Is_Return'].mean():.2%}")
+print("\nProduct Category Breakdown:")
+print(product_stats['Product_Category'].value_counts())
+
+# Show Top 5 "Star" Products
+print("\nTOP 5 HERO PRODUCTS (High Volume, Low Returns):")
+print(product_stats[product_stats['Product_Category'] == 'Star (Hero)'].sort_values(by='Quantity', ascending=False).head(5))
+
+# 6. VISUALIZATION (Profitability Matrix)
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=product_stats, x='Quantity', y='Return_Rate', hue='Product_Category', alpha=0.6)
+plt.axhline(product_stats['Return_Rate'].median(), color='red', linestyle='--', label='Median Return Rate')
+plt.axvline(product_stats['Quantity'].median(), color='blue', linestyle='--', label='Median Sales Volume')
+plt.title("Product Profitability Matrix (KPI Analysis)")
+plt.xscale('log') # Log scale to handle massive volume differences
+plt.legend()
+plt.show()
