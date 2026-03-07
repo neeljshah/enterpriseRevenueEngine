@@ -21,7 +21,10 @@ Upload `online_retail_II.csv` and explore all 4 phases interactively — filter 
 > *Dark-themed interactive dashboard — 4 tabbed phases, live KPI cards, dynamic charts, and sidebar controls.*
 > 
 
-https://github.com/user-attachments/assets/74a33b48-924f-46be-8d8a-0d94e1517f11
+
+
+https://github.com/user-attachments/assets/d11bd536-1812-4caa-9fb3-140aa3eee8cd
+
 
 
 
